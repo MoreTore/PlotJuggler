@@ -91,7 +91,7 @@ SET(CMAKE_AUTOUIC ON)
 
 
 if (NOT WIN32)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -fno-omit-frame-pointer")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O0 -fno-omit-frame-pointer")
 endif()
 
 if(APPLE AND EXISTS /usr/local/opt/qt5)
@@ -115,7 +115,8 @@ find_package(Qt5 REQUIRED COMPONENTS
     Svg
     OpenGL
     WebSockets
-    Network)
+    Network
+    Sql)
 
 set( QT_LINK_LIBRARIES
     Qt5::Core
@@ -126,6 +127,7 @@ set( QT_LINK_LIBRARIES
     Qt5::Svg
     Qt5::OpenGL
     Qt5::WebSockets
+    Qt5::Sql    
     )
 
 
@@ -279,6 +281,9 @@ add_subdirectory( plotjuggler_plugins/ToolboxLuaEditor )
 
 add_subdirectory( plotjuggler_plugins/ParserProtobuf )
 add_subdirectory( plotjuggler_plugins/ParserROS )
+
+add_subdirectory( plotjuggler_plugins/DataLoadMETASYS )
+add_subdirectory( plotjuggler_plugins/DataLoadSQL )
 
 # Install targets
 
