@@ -85,7 +85,10 @@ void CurveTreeView::addItem(const QString& group_name, const QString& tree_name,
   QStringList parts;
   if (use_separator)
   {
-    parts = tree_name.split('/', QString::SplitBehavior::SkipEmptyParts);
+    // CH-ADS:CH-NAE01/Analog Data.F-7 OA-T.#85
+    // split using "/"
+    parts = tree_name.split(QRegExp("[/]"), QString::SplitBehavior::SkipEmptyParts);
+    
   }
   else
   {
@@ -108,9 +111,9 @@ void CurveTreeView::addItem(const QString& group_name, const QString& tree_name,
 
   QTreeWidgetItem* tree_parent = this->invisibleRootItem();
 
-  for (int i = 0; i < parts.size(); i++)
+  for (int i = 0; i < parts.size(); i++) // for each part of the path
   {
-    bool is_leaf = (i == parts.size() - 1);
+    bool is_leaf = (i == parts.size() - 1); // is this the last part of the path?
     const auto& part = parts[i];
 
     QTreeWidgetItem* matching_child = nullptr;
@@ -168,7 +171,215 @@ void CurveTreeView::addItem(const QString& group_name, const QString& tree_name,
       }
     }
   }
+
   _leaf_count++;
+}
+
+void CurveTreeView::mergeSinglePlotTrees()
+{
+  QTreeWidgetItemIterator it(this);
+  while (*it)
+  {
+    QTreeWidgetItem* item = *it;
+    ++it;
+
+    if (item->childCount() == 1 && item->child(0)->data(0, Name).isValid()) // check if only one child and it's a leaf node
+    {
+      QString plot_ID = item->child(0)->data(0, Name).toString();
+      QString tree_path = getPathFromTreeItem(item);
+
+      // Remove the single child and move the plot up
+      QTreeWidgetItem* parent = item->parent(); // parent of the group
+      QTreeWidgetItem* child = item->takeChild(0); // child of the group
+      delete item;
+
+      // If the parent has a group name, update it with the new path
+      QString group_name = parent->data(0, Name).toString(); // group name of the parent
+      if (parent->data(0, IsGroupName).toBool())
+      {
+        QStringList path_parts = tree_path.split('/', QString::SkipEmptyParts);
+        path_parts.removeLast();
+        group_name = path_parts.join('/');
+        parent->setData(0, Name, group_name);
+        plot_ID = group_name + " - " + plot_ID;
+      }
+
+      // Add the plot as a child of the parent and mark it as a leaf node
+      child->setData(0, Name, plot_ID);
+      child->setFlags(child->flags() | Qt::ItemIsSelectable);
+      child->setText(1, "");
+      parent->addChild(child);
+
+      // Update the path of all the descendants of the moved plot
+      //updateTreePaths(child, tree_path); // not needed
+
+      // Restart the iterator
+      it = QTreeWidgetItemIterator(this);
+    }
+  }
+}
+
+void CurveTreeView::updateTreePaths(QTreeWidgetItem* item, const QString& new_path)
+{
+  QString old_path = getPathFromTreeItem(item);
+  if (old_path.startsWith(new_path + '/'))
+  {
+    QString suffix = old_path.mid(new_path.length() + 1);
+    QString new_child_path = new_path + '/' + suffix;
+
+    item->setData(0, Qt::UserRole, new_child_path);
+    for (int i = 0; i < item->childCount(); i++)
+    {
+      updateTreePaths(item->child(i), new_child_path);
+    }
+  }
+  else
+  {
+    QTreeWidgetItem* parent_item = item->parent();
+    if (!parent_item) // item is the root item
+    {
+      // update the root path
+      item->setData(0, Qt::UserRole, new_path);
+    }
+    else
+    {
+      // update the current item path and move it to the correct position
+      int index = parent_item->indexOfChild(item);
+      parent_item->takeChild(index);
+      item->setData(0, Qt::UserRole, new_path);
+      QTreeWidgetItem* new_parent = findOrCreateTreeItem(new_path);
+      new_parent->addChild(item);
+    }
+    // recursively update the paths of all child items
+    for (int i = 0; i < item->childCount(); i++)
+    {
+      QTreeWidgetItem* child_item = item->child(i);
+      QString child_path = getPathFromTreeItem(child_item);
+      QString new_child_path = new_path + '/' + child_path.mid(old_path.length() + 1);
+      updateTreePaths(child_item, new_child_path);
+    }
+  }
+}
+
+QTreeWidgetItem* CurveTreeView::findOrCreateTreeItem(const QString& path)
+{
+  QStringList parts = path.split('/', QString::SkipEmptyParts);
+
+  QTreeWidgetItem* parent_item = this->invisibleRootItem();
+
+  for (const auto& part : parts)
+  {
+    QTreeWidgetItem* matching_child = nullptr;
+    for (int c = 0; c < parent_item->childCount(); c++)
+    {
+      QTreeWidgetItem* child_item = parent_item->child(c);
+      if (child_item->text(0) == part)
+      {
+        matching_child = child_item;
+        break;
+      }
+    }
+
+    if (matching_child)
+    {
+      parent_item = matching_child;
+    }
+    else
+    {
+      QTreeWidgetItem* new_item = new QTreeWidgetItem(parent_item);
+      new_item->setText(0, part);
+      parent_item = new_item;
+    }
+  }
+
+  return parent_item;
+}
+
+QString CurveTreeView::getPathFromTreeItem(QTreeWidgetItem* item)
+{
+  QStringList path_parts;
+  while (item)
+  {
+    path_parts.prepend(item->text(0));
+    item = item->parent();
+  }
+  return path_parts.join('/');
+}
+
+
+
+bool CurveTreeView::groupContainsOneGroup(QTreeWidgetItem* group_item)
+{
+    // Get the number of children of the group item
+    int child_count = group_item->childCount();
+
+    // If the group item has more than 1 child, it cannot contain only 1 group
+    if (child_count != 1)
+    {
+        return false;
+    }
+
+    // Get the first child of the group item
+    QTreeWidgetItem* child_item = group_item->child(0);
+
+    // If the first child of the group item is a group item, then the group item contains only 1 group
+    return (child_item->data(0, IsGroupName).toBool());
+}
+
+bool CurveTreeView::groupContainsGroup(const QString& parent_group_name, const QString& child_group_name) const
+{
+  // Get the parent group item
+  QTreeWidgetItem* parent_item = nullptr;
+  QStringList parent_parts = parent_group_name.split(QRegExp("[. /:]"), QString::SkipEmptyParts);
+  if (!parent_parts.isEmpty())
+  {
+    parent_item = findGroupItem(parent_parts);
+  }
+
+  // Get the child group item
+  QTreeWidgetItem* child_item = nullptr;
+  QStringList child_parts = child_group_name.split(QRegExp("[. /:]"), QString::SkipEmptyParts);
+  if (!child_parts.isEmpty())
+  {
+    child_item = findGroupItem(child_parts);
+  }
+
+  // Check if the child item is a descendant of the parent item
+  while (child_item && child_item != parent_item)
+  {
+    child_item = child_item->parent();
+  }
+
+  return child_item == parent_item;
+}
+
+QTreeWidgetItem* CurveTreeView::findGroupItem(const QStringList& group_parts) const
+{
+  // Start at the root item
+  QTreeWidgetItem* current_item = invisibleRootItem();
+
+  // Traverse the tree to find the group item
+  for (const QString& part : group_parts)
+  {
+    bool found = false;
+    for (int i = 0; i < current_item->childCount(); i++)
+    {
+      QTreeWidgetItem* child_item = current_item->child(i);
+      if (child_item->data(0, IsGroupName).toBool() && child_item->text(0) == part)
+      {
+        current_item = child_item;
+        found = true;
+        break;
+      }
+    }
+    if (!found)
+    {
+      return nullptr;
+    }
+  }
+
+  // Return the found group item
+  return current_item;
 }
 
 void CurveTreeView::refreshColumns()

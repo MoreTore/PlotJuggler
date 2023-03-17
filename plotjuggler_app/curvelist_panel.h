@@ -40,6 +40,8 @@ public:
 
   bool addCurve(const std::string& plot_name);
 
+  void mergeGroups(std::vector<std::string>& plots);
+
   void addCustom(const QString& item_name);
 
   void refreshColumns();

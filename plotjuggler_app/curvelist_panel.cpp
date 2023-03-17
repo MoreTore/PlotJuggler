@@ -123,11 +123,22 @@ bool CurveListPanel::addCurve(const std::string& plot_name)
   }
 
   _tree_view->addItem(group_name, getTreeName(plot_id), plot_id);
+
   _tree_view_items.insert(plot_name);
 
   _column_width_dirty = true;
   return true;
 }
+
+void CurveListPanel::mergeGroups(std::vector<std::string>& plots)
+{
+    _tree_view->mergeSinglePlotTrees();
+    for (const auto& plot : plots)
+    {
+      qDebug() << plot.length();
+    }
+}
+
 
 void CurveListPanel::addCustom(const QString& item_name)
 {

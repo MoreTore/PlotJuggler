@@ -26,6 +26,21 @@ public:
   void addItem(const QString& prefix, const QString& tree_name,
                const QString& plot_ID) override;
 
+  void mergeSinglePlotTrees();
+
+  QString getPathFromTreeItem(QTreeWidgetItem* item);
+
+  void updateTreePaths(QTreeWidgetItem* item, const QString& new_path);
+
+  QTreeWidgetItem* findOrCreateTreeItem(const QString& path);
+  
+  bool groupContainsGroup(const QString& parent_group_name, 
+                          const QString& child_group_name) const;
+  
+  bool groupContainsOneGroup(QTreeWidgetItem* group_item);
+
+  QTreeWidgetItem* findGroupItem(const QStringList& group_parts) const;
+
   void refreshColumns() override;
 
   std::vector<std::string> getSelectedNames() override;

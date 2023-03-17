@@ -1326,6 +1326,8 @@ void MainWindow::importPlotDataMap(PlotDataMapRef& new_data, bool remove_old)
     _curvelist_widget->addCurve(added_curve);
   }
 
+  _curvelist_widget->mergeGroups(added_curves);
+
   if (curve_updated)
   {
     _curvelist_widget->refreshColumns();

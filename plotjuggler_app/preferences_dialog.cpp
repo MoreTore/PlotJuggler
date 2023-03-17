@@ -40,6 +40,9 @@ PreferencesDialog::PreferencesDialog(QWidget* parent)
   bool use_separator = settings.value("Preferences::use_separator", true).toBool();
   ui->checkBoxSeparator->setChecked(use_separator);
 
+  bool merge_trees = settings.value("Preferences::merge_trees", true).toBool();
+  ui->checkBoxMergeTree->setChecked(merge_trees);
+
   bool use_opengl = settings.value("Preferences::use_opengl", true).toBool();
   ui->checkBoxOpenGL->setChecked(use_opengl);
 
@@ -90,6 +93,7 @@ void PreferencesDialog::on_buttonBox_accepted()
   settings.setValue("Preferences::use_plot_color_index",
                     ui->radioLocalColorIndex->isChecked());
   settings.setValue("Preferences::use_separator", ui->checkBoxSeparator->isChecked());
+  settings.setValue("Preferences::merge_trees", ui->checkBoxMergeTree->isChecked());
   settings.setValue("Preferences::use_opengl", ui->checkBoxOpenGL->isChecked());
   settings.setValue("Preferences::autozoom_visibility", ui->checkBoxAutoZoomVisibility->isChecked());
   settings.setValue("Preferences::autozoom_curve_added", ui->checkBoxAutoZoomAdded->isChecked());
