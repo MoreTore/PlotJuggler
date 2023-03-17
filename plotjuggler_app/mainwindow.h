@@ -47,6 +47,8 @@ public:
   bool loadLayoutFromFile(QString filename);
   bool loadDataFromFiles(QStringList filenames);
   std::unordered_set<std::string> loadDataFromFile(const FileLoadInfo& info);
+  std::unordered_set<std::string> loadDataFromMetasys(const FileLoadInfo& info);
+  bool loadMetasys(QStringList filenames);
 
   void stopStreamingPlugin();
   void startStreamingPlugin(QString streamer_name);
@@ -280,6 +282,7 @@ private slots:
   void on_pushButtonLoadLayout_clicked();
   void on_pushButtonSaveLayout_clicked();
   void on_pushButtonLoadDatafile_clicked();
+  void on_pushButtonLoadMetasys_clicked();
 
   void on_actionColorMap_Editor_triggered();
 

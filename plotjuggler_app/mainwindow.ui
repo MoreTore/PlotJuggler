@@ -9,8 +9,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>822</width>
-    <height>720</height>
+    <width>911</width>
+    <height>711</height>
    </rect>
   </property>
   <property name="focusPolicy">
@@ -187,7 +187,7 @@
             <number>4</number>
            </property>
            <item>
-            <layout class="QHBoxLayout" name="horizontalLayout_3" stretch="0,0,1,0">
+            <layout class="QHBoxLayout" name="horizontalLayout_3" stretch="0,0,0,1,0">
              <item>
               <widget class="QLabel" name="label_4">
                <property name="text">
@@ -223,6 +223,53 @@
                  <width>22</width>
                  <height>22</height>
                 </size>
+               </property>
+               <property name="flat">
+                <bool>true</bool>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QPushButton" name="pushButtonLoadMetasys">
+               <property name="enabled">
+                <bool>true</bool>
+               </property>
+               <property name="minimumSize">
+                <size>
+                 <width>26</width>
+                 <height>26</height>
+                </size>
+               </property>
+               <property name="maximumSize">
+                <size>
+                 <width>26</width>
+                 <height>26</height>
+                </size>
+               </property>
+               <property name="focusPolicy">
+                <enum>Qt::NoFocus</enum>
+               </property>
+               <property name="toolTip">
+                <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Load Metasys SQL Database&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+               </property>
+               <property name="text">
+                <string/>
+               </property>
+               <property name="icon">
+                <iconset resource="resource.qrc">
+                 <normaloff>:/resources/metasys.png</normaloff>:/resources/metasys.png</iconset>
+               </property>
+               <property name="iconSize">
+                <size>
+                 <width>22</width>
+                 <height>22</height>
+                </size>
+               </property>
+               <property name="checkable">
+                <bool>false</bool>
+               </property>
+               <property name="checked">
+                <bool>false</bool>
                </property>
                <property name="flat">
                 <bool>true</bool>
@@ -1161,7 +1208,7 @@
                   <string>tt</string>
                  </property>
                  <property name="icon">
-                  <iconset>
+                  <iconset resource="resource.qrc">
                    <normaloff>:/style_light/line_tracker_1.png</normaloff>:/style_light/line_tracker_1.png</iconset>
                  </property>
                  <property name="iconSize">
@@ -1376,7 +1423,7 @@
                   <string/>
                  </property>
                  <property name="icon">
-                  <iconset>
+                  <iconset resource="resource.qrc">
                    <normaloff>:/resources/svg/t0.svg</normaloff>:/resources/svg/t0.svg</iconset>
                  </property>
                  <property name="iconSize">
@@ -1426,7 +1473,7 @@
                   <string/>
                  </property>
                  <property name="icon">
-                  <iconset>
+                  <iconset resource="resource.qrc">
                    <normaloff>:/resources/svg/ratio.svg</normaloff>:/resources/svg/ratio.svg</iconset>
                  </property>
                  <property name="iconSize">
@@ -1811,8 +1858,8 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>822</width>
-     <height>26</height>
+     <width>911</width>
+     <height>25</height>
     </rect>
    </property>
    <property name="minimumSize">
@@ -1887,7 +1934,7 @@
   </action>
   <action name="actionReportBug">
    <property name="icon">
-    <iconset>
+    <iconset resource="resource.qrc">
      <normaloff>:/resources/github.png</normaloff>:/resources/github.png</iconset>
    </property>
    <property name="text">
@@ -1948,7 +1995,7 @@
   </action>
   <action name="actionShare_the_love">
    <property name="icon">
-    <iconset>
+    <iconset resource="resource.qrc">
      <normaloff>:/resources/twitter.png</normaloff>:/resources/twitter.png</iconset>
    </property>
    <property name="text">
@@ -1979,6 +2026,8 @@
    <header location="global">menubar.h</header>
   </customwidget>
  </customwidgets>
- <resources/>
+ <resources>
+  <include location="resource.qrc"/>
+ </resources>
  <connections/>
 </ui>

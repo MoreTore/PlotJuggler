@@ -146,6 +146,7 @@ MainWindow::MainWindow(const QCommandLineParser& commandline_parser, QWidget* pa
   ui->pushButtonLink->setText("");
   ui->pushButtonTimeTracker->setText("");
   ui->pushButtonLoadDatafile->setText("");
+  ui->pushButtonLoadMetasys->setText("");
   ui->pushButtonRemoveTimeOffset->setText("");
   ui->pushButtonLegend->setText("");
 
@@ -1420,6 +1421,64 @@ bool MainWindow::loadDataFromFiles(QStringList filenames)
   return false;
 }
 
+bool MainWindow::loadMetasys(QStringList filenames)
+{
+  filenames.sort();
+
+  std::unordered_set<std::string> previous_names = _mapped_plot_data.getAllNames();
+
+  QStringList loaded_filenames;
+  FileLoadInfo info;
+  info.filename = filenames[0];
+  auto added_names = loadDataFromMetasys(info);
+  loaded_filenames.push_back(filenames[0]);
+  for (const auto& name : added_names)
+  {
+    previous_names.erase(name);
+  }
+
+  bool data_replaced_entirely = false;
+
+  if (previous_names.empty())
+  {
+    data_replaced_entirely = true;
+  }
+  else
+  {
+    QMessageBox::StandardButton reply;
+    reply = QMessageBox::question(
+        this, tr("Warning"), tr("Do you want to remove the previously loaded data?\n"),
+        QMessageBox::Yes | QMessageBox::No, QMessageBox::NoButton);
+
+    if (reply == QMessageBox::Yes)
+    {
+      std::vector<std::string> to_delete;
+      for (const auto& name : previous_names)
+      {
+        to_delete.push_back(name);
+      }
+      onDeleteMultipleCurves(to_delete);
+      data_replaced_entirely = true;
+    }
+  }
+
+  // special case when only the last file should be remembered
+  if (loaded_filenames.size() == 1 && data_replaced_entirely &&
+      _loaded_datafiles.size() > 1)
+  {
+    std::swap(_loaded_datafiles.back(), _loaded_datafiles.front());
+    _loaded_datafiles.resize(1);
+  }
+
+  if (loaded_filenames.size() > 0)
+  {
+    updateRecentDataMenu(loaded_filenames);
+    linkedZoomOut();
+    return true;
+  }
+  return false;
+}
+
 std::unordered_set<std::string> MainWindow::loadDataFromFile(const FileLoadInfo& info)
 {
   ui->pushButtonPlay->setChecked(false);
@@ -1499,7 +1558,94 @@ std::unordered_set<std::string> MainWindow::loadDataFromFile(const FileLoadInfo&
     {
       PlotDataMapRef mapped_data;
       FileLoadInfo new_info = info;
+      qDebug() << "Loading from file";
+      if (dataloader->readDataFromFile(&new_info, mapped_data))
+      {
+        AddPrefixToPlotData(info.prefix.toStdString(), mapped_data.numeric);
+        AddPrefixToPlotData(info.prefix.toStdString(), mapped_data.strings);
 
+        added_names = mapped_data.getAllNames();
+        importPlotDataMap(mapped_data, true);
+
+        QDomElement plugin_elem = dataloader->xmlSaveState(new_info.plugin_config);
+        new_info.plugin_config.appendChild(plugin_elem);
+
+        bool duplicate = false;
+
+        // substitute an old item of _loaded_datafiles or push_back another item.
+        for (auto& prev_loaded : _loaded_datafiles)
+        {
+          if (prev_loaded.filename == new_info.filename &&
+              prev_loaded.prefix == new_info.prefix)
+          {
+            prev_loaded = new_info;
+            duplicate = true;
+            break;
+          }
+        }
+
+        if (!duplicate)
+        {
+          _loaded_datafiles.push_back(new_info);
+        }
+      }
+    }
+    catch (std::exception& ex)
+    {
+      QMessageBox::warning(this, tr("Exception from the plugin"),
+                           tr("The plugin [%1] thrown the following exception: \n\n %3\n")
+                               .arg(dataloader->name())
+                               .arg(ex.what()));
+      return {};
+    }
+  }
+  else
+  {
+    QMessageBox::warning(this, tr("Error"),
+                         tr("Cannot read files with extension %1.\n No plugin can handle "
+                            "that!\n")
+                             .arg(info.filename));
+  }
+  _curvelist_widget->updateFilter();
+
+  // clean the custom plot. Function updateDataAndReplot will update them
+  for (auto& custom_it : _transform_functions)
+  {
+    auto it = _mapped_plot_data.numeric.find(custom_it.first);
+    if (it != _mapped_plot_data.numeric.end())
+    {
+      it->second.clear();
+    }
+    custom_it.second->reset();
+  }
+  forEachWidget([](PlotWidget* plot) { plot->updateCurves(true); });
+
+  updateDataAndReplot(true);
+  ui->timeSlider->setRealValue(ui->timeSlider->getMinimum());
+
+  return added_names;
+}
+
+
+std::unordered_set<std::string> MainWindow::loadDataFromMetasys(const FileLoadInfo& info)
+{
+  ui->pushButtonPlay->setChecked(false);
+
+  DataLoaderPtr dataloader;
+  std::unordered_set<std::string> added_names;
+
+
+  dataloader = _data_loader["SQL"];
+
+  if (dataloader)
+  {
+    QFile file(info.filename);
+
+    try
+    {
+      PlotDataMapRef mapped_data;
+      FileLoadInfo new_info = info;
+      qDebug() << "Loading from SQL";
       if (dataloader->readDataFromFile(&new_info, mapped_data))
       {
         AddPrefixToPlotData(info.prefix.toStdString(), mapped_data.numeric);
@@ -1832,6 +1978,7 @@ void MainWindow::dropEvent(QDropEvent* event)
 void MainWindow::on_stylesheetChanged(QString theme)
 {
   ui->pushButtonLoadDatafile->setIcon(LoadSvg(":/resources/svg/import.svg", theme));
+  //ui->pushButtonLoadMetasys->setIcon(LoadSvg(":/resources/svg/metasys.svg", theme));
   ui->buttonStreamingPause->setIcon(LoadSvg(":/resources/svg/pause.svg", theme));
   if (ui->buttonStreamingNotifications->isEnabled())
   {
@@ -2991,6 +3138,31 @@ void MainWindow::on_pushButtonLoadDatafile_clicked()
     updateRecentDataMenu(fileNames);
   }
 }
+
+void MainWindow::on_pushButtonLoadMetasys_clicked()
+{
+    if (_data_loader.empty())
+    {
+      QMessageBox::warning(this, tr("Warning"),
+                           tr("No plugin was loaded to process a data file\n"));
+      return;
+    }
+
+    QStringList fileNames = {"/test.sqlph"};
+
+    if (fileNames.isEmpty())
+    {
+      return;
+    }
+
+    //loadMetasys()
+
+    if (loadMetasys(fileNames))
+    {
+      updateRecentDataMenu(fileNames);
+    }
+}
+
 
 void MainWindow::on_pushButtonLoadLayout_clicked()
 {

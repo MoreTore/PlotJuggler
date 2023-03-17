@@ -6,6 +6,7 @@ DEFINES += QT_DEPRECATED_WARNINGS
 TEMPLATE = lib
 DESTDIR = $${ADS_OUT_ROOT}/lib
 QT += core gui widgets
+QT += sql
 
 !adsBuildStatic {
 	CONFIG += shared

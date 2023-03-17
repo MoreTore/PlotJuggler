@@ -328,6 +328,7 @@ contains(QWT_CONFIG, QwtOpenGL) {
     }
 
     QT += opengl
+    QT += sql
 }
 else {
 
