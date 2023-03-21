@@ -191,7 +191,7 @@ void CurveTreeView::mergeSinglePlotTrees()
       // Remove the single child and move the plot up
       QTreeWidgetItem* parent = item->parent(); // parent of the group
       QTreeWidgetItem* child = item->takeChild(0); // child of the group
-      delete item;
+      //delete item;
 
       // If the parent has a group name, update it with the new path
       QString group_name = parent->data(0, Name).toString(); // group name of the parent

@@ -1327,7 +1327,7 @@ void MainWindow::importPlotDataMap(PlotDataMapRef& new_data, bool remove_old)
     _curvelist_widget->addCurve(added_curve);
   }
 
-  _curvelist_widget->mergeGroups(added_curves);
+  //_curvelist_widget->mergeGroups(added_curves);
 
   if (curve_updated)
   {
@@ -1558,7 +1558,6 @@ std::unordered_set<std::string> MainWindow::loadDataFromFile(const FileLoadInfo&
     {
       PlotDataMapRef mapped_data;
       FileLoadInfo new_info = info;
-      qDebug() << "Loading from file";
       if (dataloader->readDataFromFile(&new_info, mapped_data))
       {
         AddPrefixToPlotData(info.prefix.toStdString(), mapped_data.numeric);
@@ -1645,7 +1644,6 @@ std::unordered_set<std::string> MainWindow::loadDataFromMetasys(const FileLoadIn
     {
       PlotDataMapRef mapped_data;
       FileLoadInfo new_info = info;
-      qDebug() << "Loading from SQL";
       if (dataloader->readDataFromFile(&new_info, mapped_data))
       {
         AddPrefixToPlotData(info.prefix.toStdString(), mapped_data.numeric);
@@ -1798,7 +1796,7 @@ void MainWindow::stopStreamingPlugin()
   }
 
   // reset max range.
-  _mapped_plot_data.setMaximumRangeX(std::numeric_limits<double>::max());
+  //_mapped_plot_data.setMaximumRangeX(std::numeric_limits<double>::max());
 }
 
 void MainWindow::startStreamingPlugin(QString streamer_name)
@@ -2527,7 +2525,7 @@ void MainWindow::updateDataAndReplot(bool replot_hidden_tabs)
       _curvelist_widget->refreshColumns();
     }
 
-    _mapped_plot_data.setMaximumRangeX(ui->streamingSpinBox->value());
+    //_mapped_plot_data.setMaximumRangeX(9999999);
   }
 
   const bool is_streaming_active = isStreamingActive();
@@ -2584,11 +2582,11 @@ void MainWindow::on_streamingSpinBox_valueChanged(int value)
     return;
   }
 
-  _mapped_plot_data.setMaximumRangeX(real_value);
+  //_mapped_plot_data.setMaximumRangeX(real_value);
 
   if (_active_streamer_plugin)
   {
-    _active_streamer_plugin->setMaximumRangeX(real_value);
+    //_active_streamer_plugin->setMaximumRangeX(real_value);
   }
 }
 

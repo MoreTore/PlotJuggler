@@ -16,9 +16,6 @@ add_definitions(
 # You can add some command line arguments at compilation time
 # Use _0x3b_ instead of semicolon
 
-#set(PJ_DEFAULT_ARGS "-n --enabled_plugins=libDataLoadCSV_0x3b_libDataStreamSample")
-#add_definitions( -DPJ_DEFAULT_ARGS="${PJ_DEFAULT_ARGS}")
-
 option(ENABLE_ASAN "Enable Address Sanitizer" OFF)
 option(BASE_AS_SHARED "Build the base library as a shared libary" OFF)
 
@@ -284,6 +281,7 @@ add_subdirectory( plotjuggler_plugins/ParserROS )
 
 add_subdirectory( plotjuggler_plugins/DataLoadMETASYS )
 add_subdirectory( plotjuggler_plugins/DataLoadSQL )
+add_subdirectory( plotjuggler_plugins/DataStreamSQL )
 
 # Install targets
 
