@@ -11,7 +11,7 @@ find_package(Qt5 COMPONENTS Sql REQUIRED)
 target_link_libraries(DataStreamSQL
     ${Qt5Widgets_LIBRARIES}
     ${Qt5Xml_LIBRARIES}
-    Qt5::Sql
+    ${Qt5Sql_LIBRARIES}
     plotjuggler_base)
 
 install(TARGETS DataStreamSQL DESTINATION ${PJ_PLUGIN_INSTALL_DIRECTORY}  )

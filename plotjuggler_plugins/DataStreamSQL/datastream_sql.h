@@ -27,6 +27,12 @@ THE SOFTWARE.
 
 using namespace PJ;
 
+struct ColumnSelection {
+    QString nameColumn;
+    QString utcdatetimeColumn;
+    QString valueColumn;
+};
+
 class SQLServer : public PJ::DataStreamer
 {
   Q_OBJECT
@@ -62,12 +68,15 @@ public:
     void tableUpdated();
 
 private:
-
+  int _limit;
+  int _offset;
   QSqlDatabase _db;
   std::thread _thread;
   QString selectTable();
+  QString selectDatabase();
+  ColumnSelection selectColumns(const QStringList &availableColumns);
   bool _running;
-  QSqlTableModel* _model; // Change this to a pointer
+  QSqlQueryModel* _model;
   PJ::MessageParserPtr _parser;
   QTimer _checkNewRowsTimer; // Add this new QTimer
   int _previousRowCount;

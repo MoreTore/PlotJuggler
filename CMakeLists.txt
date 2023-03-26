@@ -150,6 +150,7 @@ include_directories(
     ${Qt5WebSockets_INCLUDE_DIRS}
     ${Qt5Svg_INCLUDE_DIRS}
     ${Qt5OpenGL_INCLUDE_DIRS}
+    ${Qt5Sql_INCLUDE_DIRS}
     ./3rdparty/
     ./3rdparty/color_widgets/include
     ./3rdparty/Qt-Advanced-Docking/include

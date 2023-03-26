@@ -1,5 +1,4 @@
 #include "dataload_sql.h"
-#include "Worker.h"
 #include <QTextStream>
 #include <QFile>
 #include <QMessageBox>

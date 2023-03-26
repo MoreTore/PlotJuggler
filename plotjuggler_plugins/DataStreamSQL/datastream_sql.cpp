@@ -52,6 +52,9 @@ THE SOFTWARE.
 #include <QSqlIndex>
 #include <QThread>
 #include <QtConcurrent/QtConcurrent>
+#include <QCheckBox>
+#include <QListWidget>
+
 
 
 
@@ -83,7 +86,7 @@ void SQLServer::checkForNewRows()
     // Check if there are new rows
     if (currentRowCount > _previousRowCount) {
         // Update the model
-        _model->select();
+        //_model->select();
         // Emit the tableUpdated signal
         emit tableUpdated();
     }
@@ -93,6 +96,8 @@ void SQLServer::checkForNewRows()
 
 bool SQLServer::start(QStringList*)
 {
+  _limit = 200;
+  _offset = 0;
   if (_running)
   {
     return _running;
@@ -119,11 +124,19 @@ QLineEdit *lineEdit1 = new QLineEdit(&dialog);
 QLineEdit *lineEdit2 = new QLineEdit(&dialog);
 QLineEdit *lineEdit3 = new QLineEdit(&dialog);
 QLineEdit *lineEdit4 = new QLineEdit(&dialog);
+QLineEdit *lineEdit5 = new QLineEdit(&dialog);
+
+// Add a checkbox for Trusted Connection
+QCheckBox *trustedConnectionCheckbox = new QCheckBox("Use Trusted Connection", &dialog);
+// Set the initial checked state based on the value loaded from settings (default to false if not found)
+trustedConnectionCheckbox->setChecked(settings.value("trustedConnection", false).toBool());
+form.addRow(trustedConnectionCheckbox);
 // default values loaded from settings into the lineEdits
 lineEdit1->setText(settings.value("hostName", "localhost").toString());
 lineEdit2->setText(settings.value("dbName", "sys").toString());
 lineEdit3->setText(settings.value("userName", "ryley").toString());
 lineEdit4->setText(settings.value("password", "12345678").toString());
+lineEdit5->setText(settings.value("driverName", "ODBC Driver 17 for SQL Server").toString());
 
 QString hostName = settings.value("hostName", "localhost").toString();
 form.addRow("hostName", lineEdit1);
@@ -137,8 +150,11 @@ fields << lineEdit3;
 QString password = settings.value("password", "12345678").toString();
 form.addRow("password", lineEdit4);
 fields << lineEdit4;
+QString driverName = settings.value("driverName", "ODBC Driver 17 for SQL Server").toString();
+form.addRow("driverName", lineEdit5);
+fields << lineEdit5;
 
-
+bool useTrustedConnection = false;
 // Add some standard buttons (Cancel/Ok) at the bottom of the dialog
 QDialogButtonBox buttonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel,
                            Qt::Horizontal, &dialog);
@@ -152,13 +168,45 @@ if (dialog.exec() == QDialog::Accepted) {
     foreach(QLineEdit * lineEdit, fields) {
         qDebug() << lineEdit->text();
     }
+    // Get the state of the Trusted Connection checkbox
+    useTrustedConnection = trustedConnectionCheckbox->isChecked();
+    qDebug() << "Trusted Connection:" << useTrustedConnection;
 } else {
     qDebug() << "Dialog was cancelled";
     return false;
 }
 
     
-QSqlDatabase _db = QSqlDatabase::addDatabase("QMYSQL");
+
+// Check if there are any available database drivers
+if (QSqlDatabase::drivers().isEmpty()) {
+    QMessageBox::critical(nullptr, "Unable to load database", "This demo needs at least one Qt SQL driver");
+    return false;
+}
+
+// Ask the user to select a database driver from the list of available drivers (e.g., QSQLITE, QMYSQL, QODBC)
+QString driver = QInputDialog::getItem(nullptr, "Database Driver", "Select a database driver:", QSqlDatabase::drivers(), 0, false);
+// If the user cancelled the dialog, return
+if (driver.isEmpty()) {
+    return false;
+}
+
+QSqlDatabase _db = QSqlDatabase::addDatabase(driver);
+
+QString connectionString;
+if (useTrustedConnection) {
+    connectionString = QString("Driver={%1};Server=%2;Database=%3;Trusted_Connection=Yes;TrustServerCertificate=yes;")
+                           .arg(driverName)
+                            .arg(hostName)
+                           .arg(dbName);
+} else {
+    connectionString = QString("Driver={SQL Server};Server=%1;Database=%2;")
+                           .arg(hostName)
+                           .arg(dbName);
+}
+
+// Open the database
+_db.setDatabaseName(connectionString);
 
 //hostName = QInputDialog::getText(nullptr, "Database Host", "Enter database host (e.g., localhost):", QLineEdit::Normal, hostName);
 //dbName = QInputDialog::getText(nullptr, "Database Name", "Enter database name:", QLineEdit::Normal, dbName);
@@ -169,12 +217,13 @@ QSqlDatabase _db = QSqlDatabase::addDatabase("QMYSQL");
   dbName = lineEdit2->text();
   userName = lineEdit3->text();
   password = lineEdit4->text();
-  
+/*
   // Open the database
   _db.setHostName(hostName);
   _db.setDatabaseName(dbName);
   _db.setUserName(userName);
   _db.setPassword(password);
+  */
   settings.setValue("hostName", hostName);
   settings.setValue("dbName", dbName);
   settings.setValue("userName", userName);
@@ -191,20 +240,61 @@ QSqlDatabase _db = QSqlDatabase::addDatabase("QMYSQL");
     qDebug() << "Database connection established";
     qDebug() << "Database name:" << _db.databaseName();
   }
+  qDebug() << _db.lastError().text();
+
+  QString selectedDatabase = selectDatabase();
+  if (selectedDatabase.isEmpty()) {
+      qDebug() << "No database selected";
+      return false;
+  } else {
+      // Set the database name and reconnect
+      connectionString = QString("Driver={%1};Server=%2;Database=%3;Trusted_Connection=Yes;TrustServerCertificate=yes;")
+                             .arg(driverName)
+                              .arg(hostName)
+                             .arg(dbName);
+      _db.setDatabaseName(connectionString);
+      if (!_db.open()) {
+          qDebug() << "Failed to connect to the selected database:" << _db.lastError().text();
+          return false;
+      }
+      qDebug() << "Connected to the selected database:" << selectedDatabase;
+  }
 
   QString selectedTable = selectTable();
   if (selectedTable.isEmpty()) {
       qDebug() << "No table selected";
       return false;
-  }
+  } else {
+      QSqlRecord tableRecord = _db.record(selectedTable);
+      QStringList availableColumns;
+      for (int i = 0; i < tableRecord.count(); i++) {
+          availableColumns << tableRecord.fieldName(i);
+      }
+
+      // Let the user select the required columns
+      ColumnSelection selectedColumns = selectColumns(availableColumns);
+
+      if (selectedColumns.nameColumn.isEmpty() ||
+          selectedColumns.utcdatetimeColumn.isEmpty() ||
+          selectedColumns.valueColumn.isEmpty()) {
+          qDebug() << "Required columns not selected";
+          return false;
+      } else {
+          // Perform the parsing with the selected columns
+          qDebug() << "Selected Columns: Name =" << selectedColumns.nameColumn
+                   << ", UTCDatetime =" << selectedColumns.utcdatetimeColumn
+                   << ", Value =" << selectedColumns.valueColumn;
+      }
+    }
+    /*
     QSqlQueryModel model;
-    model.setQuery(QSqlQuery("SELECT * FROM " + selectedTable + " LIMIT 200", _db));
+    model.setQuery(QSqlQuery("SELECT * FROM PointData LIMIT 200", _db));
     QTableView tableView;
     tableView.setModel(&model);
     tableView.setSelectionBehavior(QAbstractItemView::SelectRows);
     tableView.setSelectionMode(QAbstractItemView::SingleSelection);
     tableView.resizeColumnsToContents();
-
+    */
   
 
   if (!_db.open())
@@ -216,18 +306,34 @@ QSqlDatabase _db = QSqlDatabase::addDatabase("QMYSQL");
     return false;
   } else {
     
-    _model = new QSqlTableModel(nullptr, _db); // Instantiate the QSqlTableModel here
+    //_model = new QSqlTableModel(nullptr, _db); // Instantiate the QSqlTableModel here
     qDebug() << "Connected to the database";
-    //_model = new QSqlTableModel(nullptr, _db);
-    _model->setParent(this); // Set the parent to this SQLServer instance
+    _model = new QSqlQueryModel();
+    //_model = new QSqlQuery(_db);
+
+  }
+  // Use the SELECT COUNT(*) from table to get the number of rows in the table
+  QSqlQuery query("SELECT COUNT(*) FROM " + selectedTable, _db);
+  if (query.next())
+  {
+    _previousRowCount = query.value(0).toInt();
+    qDebug() << "Number of rows in the table:" << _previousRowCount;
+  }
+  else
+  {
+    qDebug() << "Failed to get the number of rows in the table";
+    return false;
   }
 
-  _model->setTable("PointData");
-  _model->select(); 
+  query.finish();
+  query.clear();
+  int cnt = _model->rowCount();
+  _model->setQuery("SELECT * FROM" + selectedTable + "LIMIT 200 OFFSET 0");
+  _model->setParent(this); // Set the parent to this SQLServer instance
 
+  cnt = _model->rowCount();
 
   _running = true;
-  _previousRowCount = _model->rowCount();
 
   // Set up the QTimer to check for new rows periodically
   connect(&_checkNewRowsTimer, &QTimer::timeout, this, &SQLServer::checkForNewRows);
@@ -259,7 +365,7 @@ void SQLServer::processData()
   {
     return;
   }
-
+  
   if (_row > _previousRowCount){
     // start the timer to check for new rows. Only do this once
     if (!_checkNewRowsTimer.isActive()) {
@@ -267,9 +373,10 @@ void SQLServer::processData()
     }
     return;
   }
+  //_model->fetchMore();
 
   // get the data from the column
-  QString pointName = _model->data(_model->index(_row, 0)).toString();
+  QString pointName = _model->record(_row).value(0).toString();
   QDateTime utcDateTime = _model->data(_model->index(_row, 3)).toDateTime();
   double timestamp = utcDateTime.toMSecsSinceEpoch()/1000.0;
   if (!utcDateTime.isValid())
@@ -335,6 +442,7 @@ void SQLServer::loop()
 
 
 // Add this new function
+/*
 QString SQLServer::selectTable()
 {
     QDialog tableDialog;
@@ -344,7 +452,7 @@ QString SQLServer::selectTable()
     QTableView tableView;
 
     QSqlQueryModel model;
-    model.setQuery(QSqlQuery("SHOW TABLES", _db));
+    model.setQuery(QSqlQuery("SELECT name FROM sys.tables", _db));
 
     tableView.setModel(&model);
     tableView.setSelectionBehavior(QAbstractItemView::SelectRows);
@@ -379,3 +487,132 @@ QString SQLServer::selectTable()
     tableDialog.exec();
     return selectedTable;
 }
+*/
+QString SQLServer::selectTable()
+{
+    QDialog tableDialog;
+    tableDialog.setWindowTitle("Select View");
+
+    QVBoxLayout layout;
+    QTableView tableView;
+
+    QSqlQueryModel model;
+    model.setQuery(QSqlQuery("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.VIEWS", _db));
+
+    tableView.setModel(&model);
+    tableView.setSelectionBehavior(QAbstractItemView::SelectRows);
+    tableView.setSelectionMode(QAbstractItemView::SingleSelection);
+    tableView.resizeColumnsToContents();
+
+    QPushButton selectButton("Select");
+    QPushButton cancelButton("Cancel");
+
+    layout.addWidget(&tableView);
+    layout.addWidget(&selectButton);
+    layout.addWidget(&cancelButton);
+    tableDialog.setLayout(&layout);
+
+    QString selectedView;
+
+    QObject::connect(&selectButton, &QPushButton::clicked, [&]() {
+        QModelIndexList selectedIndexes = tableView.selectionModel()->selectedRows();
+        if (!selectedIndexes.isEmpty()) {
+            QModelIndex selectedIndex = selectedIndexes.first();
+            selectedView = model.record(selectedIndex.row()).value(0).toString();
+            tableDialog.accept();
+        }
+        else {
+            QMessageBox::warning(&tableDialog, "No view selected", "Please select a view");
+        }
+    });
+    QObject::connect(&cancelButton, &QPushButton::clicked, [&]() {
+        tableDialog.reject();
+    });
+
+    tableDialog.exec();
+    return selectedView;
+}
+
+QString SQLServer::selectDatabase()
+{
+    QDialog databaseDialog;
+    databaseDialog.setWindowTitle("Select Database");
+
+    QVBoxLayout layout;
+    QListWidget databaseList;
+
+    QSqlQuery query(_db);
+    if (query.exec("SELECT name FROM sys.databases")) {
+        while (query.next()) {
+            databaseList.addItem(query.value(0).toString());
+        }
+    } else {
+        qDebug() << "Failed to execute query:" << query.lastError().text();
+    }
+
+    QPushButton selectButton("Select");
+    QPushButton cancelButton("Cancel");
+
+    layout.addWidget(&databaseList);
+    layout.addWidget(&selectButton);
+    layout.addWidget(&cancelButton);
+    databaseDialog.setLayout(&layout);
+
+    QString selectedDatabase;
+
+    QObject::connect(&selectButton, &QPushButton::clicked, [&]() {
+        QListWidgetItem *selectedItem = databaseList.currentItem();
+        if (selectedItem) {
+            selectedDatabase = selectedItem->text();
+            databaseDialog.accept();
+        }
+        else {
+            QMessageBox::warning(&databaseDialog, "No database selected", "Please select a database");
+        }
+    });
+    QObject::connect(&cancelButton, &QPushButton::clicked, [&]() {
+        databaseDialog.reject();
+    });
+
+    databaseDialog.exec();
+    return selectedDatabase;
+}
+
+
+
+ColumnSelection SQLServer::selectColumns(const QStringList &availableColumns)
+{
+    QDialog columnDialog;
+    columnDialog.setWindowTitle("Select Columns");
+
+    QFormLayout form(&columnDialog);
+
+    QComboBox nameColumnComboBox;
+    QComboBox utcdatetimeColumnComboBox;
+    QComboBox valueColumnComboBox;
+
+    nameColumnComboBox.addItems(availableColumns);
+    utcdatetimeColumnComboBox.addItems(availableColumns);
+    valueColumnComboBox.addItems(availableColumns);
+
+    form.addRow("Name Column:", &nameColumnComboBox);
+    form.addRow("UTCDatetime Column:", &utcdatetimeColumnComboBox);
+    form.addRow("Value Column:", &valueColumnComboBox);
+
+    QDialogButtonBox buttonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel,
+                           Qt::Horizontal, &columnDialog);
+    form.addRow(&buttonBox);
+
+    QObject::connect(&buttonBox, SIGNAL(accepted()), &columnDialog, SLOT(accept()));
+    QObject::connect(&buttonBox, SIGNAL(rejected()), &columnDialog, SLOT(reject()));
+
+    ColumnSelection selectedColumns;
+    if (columnDialog.exec() == QDialog::Accepted) {
+        selectedColumns.nameColumn = nameColumnComboBox.currentText();
+        selectedColumns.utcdatetimeColumn = utcdatetimeColumnComboBox.currentText();
+        selectedColumns.valueColumn = valueColumnComboBox.currentText();
+    }
+
+    return selectedColumns;
+}
+
