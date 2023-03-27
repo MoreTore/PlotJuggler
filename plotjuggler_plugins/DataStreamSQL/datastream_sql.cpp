@@ -150,9 +150,14 @@ fields << lineEdit3;
 QString password = settings.value("password", "12345678").toString();
 form.addRow("password", lineEdit4);
 fields << lineEdit4;
-QString driverName = settings.value("driverName", "ODBC Driver 17 for SQL Server").toString();
+QString driverName = settings.value("driverName", "ODBC Driver 18 for SQL Server").toString();
 form.addRow("driverName", lineEdit5);
 fields << lineEdit5;
+hostName = lineEdit1->text();
+dbName = lineEdit2->text();
+userName = lineEdit3->text();
+password = lineEdit4->text();
+driverName = lineEdit5->text();
 
 bool useTrustedConnection = false;
 // Add some standard buttons (Cancel/Ok) at the bottom of the dialog
@@ -192,6 +197,17 @@ if (driver.isEmpty()) {
 }
 
 QSqlDatabase _db = QSqlDatabase::addDatabase(driver);
+hostName = lineEdit1->text();
+dbName = lineEdit2->text();
+userName = lineEdit3->text();
+password = lineEdit4->text();
+driverName = lineEdit5->text();
+settings.setValue("hostName", hostName);
+settings.setValue("dbName", dbName);
+settings.setValue("userName", userName);
+settings.setValue("password", password);
+settings.setValue("driverName", driverName);
+
 
 QString connectionString;
 if (useTrustedConnection) {
@@ -213,10 +229,7 @@ _db.setDatabaseName(connectionString);
 //userName = QInputDialog::getText(nullptr, "User Name", "Enter database user name:", QLineEdit::Normal, userName);
 //password = QInputDialog::getText(nullptr, "Password", "Enter database password:", QLineEdit::Password, password);
 
-  hostName = lineEdit1->text();
-  dbName = lineEdit2->text();
-  userName = lineEdit3->text();
-  password = lineEdit4->text();
+
 /*
   // Open the database
   _db.setHostName(hostName);
@@ -224,10 +237,6 @@ _db.setDatabaseName(connectionString);
   _db.setUserName(userName);
   _db.setPassword(password);
   */
-  settings.setValue("hostName", hostName);
-  settings.setValue("dbName", dbName);
-  settings.setValue("userName", userName);
-  settings.setValue("password", password);
 
   if (!_db.open()) {
     qDebug() << "Database error:" << _db.lastError().text();
@@ -306,9 +315,9 @@ _db.setDatabaseName(connectionString);
     return false;
   } else {
     
-    //_model = new QSqlTableModel(nullptr, _db); // Instantiate the QSqlTableModel here
+    
     qDebug() << "Connected to the database";
-    _model = new QSqlQueryModel();
+    //_model = new QSqlQueryModel();
     //_model = new QSqlQuery(_db);
 
   }
@@ -324,14 +333,14 @@ _db.setDatabaseName(connectionString);
     qDebug() << "Failed to get the number of rows in the table";
     return false;
   }
-
   query.finish();
   query.clear();
-  int cnt = _model->rowCount();
-  _model->setQuery("SELECT * FROM" + selectedTable + "LIMIT 200 OFFSET 0");
-  _model->setParent(this); // Set the parent to this SQLServer instance
 
-  cnt = _model->rowCount();
+  _model = new QSqlTableModel(nullptr, _db); // Instantiate the QSqlTableModel here
+  _model->setParent(this); // Set the parent to this SQLServer instance
+  
+  _model->setTable(selectedTable);
+  _model->select();
 
   _running = true;
 
@@ -376,47 +385,51 @@ void SQLServer::processData()
   //_model->fetchMore();
 
   // get the data from the column
-  QString pointName = _model->record(_row).value(0).toString();
-  QDateTime utcDateTime = _model->data(_model->index(_row, 3)).toDateTime();
-  double timestamp = utcDateTime.toMSecsSinceEpoch()/1000.0;
-  if (!utcDateTime.isValid())
-  {
+  int chunk = 0;
+  while (chunk < 10000){
+      chunk++;
+    QString pointName = _model->record(_row).value(0).toString();
+    QDateTime utcDateTime = _model->data(_model->index(_row, 3)).toDateTime();
+    double timestamp = utcDateTime.toMSecsSinceEpoch()/1000.0;
+    if (!utcDateTime.isValid())
+    {
+      _row++;
+      return;
+    }
+    double actualValue = _model->data(_model->index(_row, 4)).toDouble();
     _row++;
-    return;
-  }
-  double actualValue = _model->data(_model->index(_row, 4)).toDouble();
-  _row++;
 
-  try
-  {
-    // important use the mutex to protect any access to the data
-    std::lock_guard<std::mutex> lock(mutex());
+    try
+    {
+      // important use the mutex to protect any access to the data
+      std::lock_guard<std::mutex> lock(mutex());
 
-    QStringList pointNameParts = pointName.split(metasys_regx, QString::SplitBehavior::SkipEmptyParts);
-    // remove the second last element which is #85 just because thats how johnson controls made the names
-    pointNameParts.removeAt(pointNameParts.size() - 1);
-    // join the vector of strings into a single string but with a '/' between each part
-    pointName = pointNameParts.join("/");
+      QStringList pointNameParts = pointName.split(metasys_regx, QString::SplitBehavior::SkipEmptyParts);
+      // remove the second last element which is #85 just because thats how johnson controls made the names
+      pointNameParts.removeAt(pointNameParts.size() - 1);
+      // join the vector of strings into a single string but with a '/' between each part
+      pointName = pointNameParts.join("/");
 
-    auto& plotdata = dataMap().addNumeric(pointName.toStdString())->second;
-    auto& plot = dataMap().numeric.find(pointName.toStdString())->second;
-    plot.pushBack(PlotData::Point(timestamp, actualValue));
+      auto& plotdata = dataMap().addNumeric(pointName.toStdString())->second;
+      auto& plot = dataMap().numeric.find(pointName.toStdString())->second;
+      plot.pushBack(PlotData::Point(timestamp, actualValue));
 
-    
-    //_parser->parseMessage(msg, timestamp);
-    emit dataReceived();
-  }
-  catch (std::exception& err)
-  {
-    QMessageBox::warning(nullptr, tr("SQL Server"),
-                          tr("Problem parsing the message. SQL Server will be "
-                            "stopped.\n%1")
-                              .arg(err.what()),
-                          QMessageBox::Ok);
-    shutdown();
-    // notify the GUI
-    emit closed();
-    return;
+      
+      //_parser->parseMessage(msg, timestamp);
+      emit dataReceived();
+    }
+    catch (std::exception& err)
+    {
+      QMessageBox::warning(nullptr, tr("SQL Server"),
+                            tr("Problem parsing the message. SQL Server will be "
+                              "stopped.\n%1")
+                                .arg(err.what()),
+                            QMessageBox::Ok);
+      shutdown();
+      // notify the GUI
+      emit closed();
+      return;
+    }
   }
   return;
 }

@@ -76,7 +76,7 @@ private:
   QString selectDatabase();
   ColumnSelection selectColumns(const QStringList &availableColumns);
   bool _running;
-  QSqlQueryModel* _model;
+  QSqlTableModel* _model;
   PJ::MessageParserPtr _parser;
   QTimer _checkNewRowsTimer; // Add this new QTimer
   int _previousRowCount;
