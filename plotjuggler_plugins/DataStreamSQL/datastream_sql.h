@@ -35,6 +35,7 @@ struct ColumnSelection {
     QString valueColumn;
 };
 
+
 class SQLServer : public PJ::DataStreamer
 {
   Q_OBJECT
@@ -42,6 +43,7 @@ class SQLServer : public PJ::DataStreamer
   Q_INTERFACES(PJ::DataStreamer)
 
 public:
+
   SQLServer();
 
   virtual bool start(QStringList*) override;
@@ -70,6 +72,7 @@ public:
     void tableUpdated();
 
 private:
+
   QString _selectedTable;
   QSqlDatabase _db;
   std::thread _thread;
@@ -94,11 +97,10 @@ private slots:
   void checkForNewRows();
   int countRowsInTable(QSqlDatabase* database, QString* selectedTableName);
   bool addPoints(QSqlDatabase* database, QSettings* settings);
-  QString selectModelFromList(QSqlDatabase* database, QDialog* tableDialog);
-  QStringList selectModelsFromListWidget(QSqlDatabase* database, QDialog* tableDialog);
-  QString selectPointDataTableSource(QSqlDatabase* database);
-  QString selectPointDefsTableSource(QSqlDatabase* database);
+  bool selectPointDataTableSources(QSqlDatabase* database, QStringList* selectedTables, ColumnSelection* selectedColumns, QSettings* settings);
+  bool selectModelsFromListWidget(QSqlDatabase* database, QDialog* tableDialog, QStringList* selectedViews);
+  bool selectPointDefsTableSource(QSqlDatabase* database, QStringList* selectedTables, QSettings* settings);
   QString getConnectionString(QSettings* settings);
-
+  //ColumnSelection selectDataColumns(QSqlDatabase* database, QStringList* selectedTables, QSettings* settings);
   
 };

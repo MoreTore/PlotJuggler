@@ -89,46 +89,98 @@ int SQLServer::countRowsInTable(QSqlDatabase* database, QString* selectedTableNa
 
 bool SQLServer::addPoints(QSqlDatabase* database, QSettings* settings)
 {
-    QString pointDefsSource = selectPointDefsTableSource(database);
-
-    QSqlRecord tableRecord = _db.record(pointDefsSource);
+    int count = 0;
+    QSqlRecord tableRecord;
     QStringList availableColumns;
-    for (int i = 0; i < tableRecord.count(); i++) {
-        availableColumns << tableRecord.fieldName(i);
+    QStringList pointDefsSourceList;
+    if (!selectPointDefsTableSource(database, &pointDefsSourceList, settings))
+    {
+        qDebug() << "Failed to select Point Definition Table Source";
+        return false;
     }
 
-    // Let the user select the required columns
-    ColumnSelection selectedColumns = selectPointDefsColumns(availableColumns, settings);
-
-    if (selectedColumns.nameColumn.isEmpty() ||
-      selectedColumns.pointIDColumn.isEmpty()) {
-      qDebug() << "Required columns not selected";
+    if (pointDefsSourceList.isEmpty()) {
+      qDebug() << "No point definitions table selected";
       return false;
     } else {
-      // Perform the parsing with the selected columns
-      qDebug() << "Selected Columns: Name =" << selectedColumns.nameColumn
-                << ", PointID =" << selectedColumns.pointIDColumn;
+      qDebug() << "Selected Point Definitions Table:" << pointDefsSourceList;
+      for (int i = 0; i < pointDefsSourceList.size(); i++) {
+        qDebug() << "Table" << i << ":" << pointDefsSourceList.at(i);
+        tableRecord = database->record(pointDefsSourceList.at(i));
+        for (int j = 0; j < tableRecord.count(); j++) {
+          availableColumns << tableRecord.fieldName(j);
+        }
+        ColumnSelection selectedColumns = selectPointDefsColumns(availableColumns, settings);
+        if (selectedColumns.nameColumn.isEmpty() ||
+          selectedColumns.pointIDColumn.isEmpty()) {
+          qDebug() << "Required columns not selected";
+          return false;
+        } else {
+          // Perform the parsing with the selected columns
+          qDebug() << "Selected Columns: Name =" << selectedColumns.nameColumn
+                    << ", PointID =" << selectedColumns.pointIDColumn;
+        }
+        
+        QSqlQuery query("SELECT " + selectedColumns.pointIDColumn + "," + selectedColumns.nameColumn + " FROM " + pointDefsSourceList.at(i), *database);
+        while (query.next())
+        {
+          count++;
+          int pointId = query.value(0).toInt();
+          QStringList pointNameParts = query.value(1).toString().split(metasys_regx, QString::SplitBehavior::SkipEmptyParts);
+          pointNameParts.removeAt(pointNameParts.size() - 1);
+          QString pointName = pointNameParts.join("/");
+          dataMap().addNumeric(pointName.toStdString());
+          _pointIdToNameMap[pointId] = pointName.toStdString();
+          qDebug() << "Added name" << pointName;
+        }
+        qDebug() << "Added" << count << " Point Definitions";
+        query.finish();
+        query.clear();
+      }
     }
-    int count = 0;
-    QSqlQuery query("SELECT " + selectedColumns.pointIDColumn + "," + selectedColumns.nameColumn + " FROM " + pointDefsSource, *database);
-    while (query.next())
-    {
-      count++;
-      int pointId = query.value(0).toInt();
-      QStringList pointNameParts = query.value(1).toString().split(metasys_regx, QString::SplitBehavior::SkipEmptyParts);
-      pointNameParts.removeAt(pointNameParts.size() - 1);
-      QString pointName = pointNameParts.join("/");
-      dataMap().addNumeric(pointName.toStdString());
-      _pointIdToNameMap[pointId] = pointName.toStdString();
-
-      qDebug() << "Added name" << pointName;
-
-    }
-    qDebug() << "Added" << count << " Point Definitions";
-    query.finish();
-    query.clear();
     return true;
 }
+
+bool SQLServer::selectPointDataTableSources(QSqlDatabase* database, QStringList* selectedTables, ColumnSelection* selectedColumns, QSettings* settings)
+{
+  QDialog tableDialog;
+  tableDialog.setWindowTitle("Select Point Data Source");
+  if (!selectModelsFromListWidget(database, &tableDialog, selectedTables)) {
+    qDebug() << "No tables selected";
+    return false;
+  }
+  QSqlRecord tableRecord;
+  QStringList availableColumns;
+  if (selectedTables->isEmpty()) {
+    qDebug() << "No tables selected";
+    return false;
+  } else {
+    // Set the selected table
+    for (int i = 0; i < selectedTables->count(); i++) {
+      QString selectedTable = selectedTables->at(i);
+      tableRecord = database->record(selectedTable);
+      for (int i = 0; i < tableRecord.count(); i++) {
+        availableColumns << tableRecord.fieldName(i);
+      }
+      *selectedColumns = selectPointDataColumns(availableColumns, settings);
+      if (selectedColumns->pointIDColumn.isEmpty() ||
+        selectedColumns->utcdatetimeColumn.isEmpty() ||
+        selectedColumns->valueColumn.isEmpty()) {
+        qDebug() << "Required columns not selected";
+        return false;
+      } else {
+        // Perform the parsing with the selected columns
+        qDebug() << "Selected Columns: PointID =" << selectedColumns->pointIDColumn
+                  << ", UTCDatetime =" << selectedColumns->utcdatetimeColumn
+                  << ", Value =" << selectedColumns->valueColumn;
+      }
+      qDebug() << "Selected tables:" << selectedTable;
+    }
+    //qDebug() << "Selected tables:" << selectedTables->join(", ");
+  }
+  return true;
+}
+
 
 bool SQLServer::start(QStringList*)
 {
@@ -142,31 +194,42 @@ bool SQLServer::start(QStringList*)
 
   _model = new QSqlQuery(_db);
   _model->setForwardOnly(true);
-
+  QStringList selectedTables;
+  ColumnSelection columnSelection;
+  if(!selectPointDataTableSources(&_db, &selectedTables, &columnSelection, &_settings))
+  {
+      qDebug() << "Failed to get table source";
+      return false;
+  }
+  _previousRowCount = 0;
+  for (int i = 0; i < selectedTables.size(); i++) {
+    _previousRowCount += countRowsInTable(&_db, &selectedTables[i]);
+    qDebug() << "Table" << i << ":" << selectedTables.at(i);
+  }
     // PointID,UTCDateTime,ActualValue
-  _model->prepare("SELECT * FROM " + _selectedTable);
+  QString query = "SELECT " + columnSelection.pointIDColumn + "," + columnSelection.utcdatetimeColumn + "," + columnSelection.valueColumn + " FROM " + selectedTables[0];
+  qDebug() << query;
+  if (!_model->prepare(query))
+  {
 
-  // Use the SELECT COUNT(*) from table to get the number of rows in the table
-  _previousRowCount = countRowsInTable(&_db, &_selectedTable);
+      qDebug() << "Failed to prepare" << _model->lastError();
+  }
+
+  
   if (!(_previousRowCount > 0) ) {
-#ifdef DEBUG
       qDebug() << "No rows in selected table!";
-#endif
       return false;
   }
   if(!addPoints(&_db, &_settings)){
-#ifdef DEBUG
-      qDebug() << "No point definitions";
-#endif
+      qDebug() << "Failed to add points" << _db.lastError();
       return false;
   }
-  
-  _thread = std::thread([this]() { this->loop(); });
   if(!_model->exec()){
-      qDebug() << "Failed";
+      qDebug() << "Failed to exec" << _model->lastError();
+      return false;
   }
-
   _running = true;
+  _thread = std::thread([this]() { this->loop(); });
 
   return _running;
 }
@@ -195,7 +258,7 @@ void SQLServer::processData()
     return;
   }
 
-  QDateTime utcDateTime = _model->value(3).toDateTime();
+  QDateTime utcDateTime = _model->value(1).toDateTime();
   double timestamp = utcDateTime.toMSecsSinceEpoch() / 1000.0;
 
   if (!utcDateTime.isValid())
@@ -204,13 +267,13 @@ void SQLServer::processData()
     return;
   }
 
-  double actualValue = _model->value(4).toDouble();
+  double actualValue = _model->value(2).toDouble();
   _row++;
 
   try
   {
     std::lock_guard<std::mutex> lock(mutex());
-    int pointId = _model->value(1).toInt();
+    int pointId = _model->value(0).toInt();
     auto& plot = dataMap().numeric.find(_pointIdToNameMap[pointId])->second;
     plot.pushBack(PlotData::Point(timestamp, actualValue));
     emit dataReceived();
@@ -269,58 +332,18 @@ void SQLServer::checkForNewRows()
 }
 
 
-QString SQLServer::selectModelFromList(QSqlDatabase* database, QDialog* tableDialog)
-{
-    QSqlQueryModel model;
-    model.setQuery(QSqlQuery("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES UNION SELECT TABLE_NAME FROM INFORMATION_SCHEMA.VIEWS;", *database));
 
-    QVBoxLayout layout;
-    QListWidget listWidget;
 
-    for (int i = 0; i < model.rowCount(); ++i) {
-        listWidget.addItem(model.record(i).value(0).toString());
-    }
-
-    QPushButton selectButton("Select");
-    QPushButton cancelButton("Cancel");
-
-    layout.addWidget(&listWidget);
-    layout.addWidget(&selectButton);
-    layout.addWidget(&cancelButton);
-    tableDialog->setLayout(&layout);
-
-    QString selectedView;
-
-    QObject::connect(&selectButton, &QPushButton::clicked, [&]() {
-        QList<QListWidgetItem*> selectedItems = listWidget.selectedItems();
-        if (!selectedItems.isEmpty()) {
-            selectedView = selectedItems.first()->text();
-            tableDialog->accept();
-        }
-        else {
-            QMessageBox::warning(tableDialog, "No source selected", "Please select a source");
-        }
-    });
-    QObject::connect(&cancelButton, &QPushButton::clicked, [&]() {
-        tableDialog->reject();
-    });
-
-    tableDialog->exec();
-    return selectedView;
-}
-
-QString SQLServer::selectPointDataTableSource(QSqlDatabase* database)
-{
-    QDialog tableDialog;
-    tableDialog.setWindowTitle("Select Point Data Source");
-    return selectModelsFromListWidget(database, &tableDialog)[0];
-}
-
-QString SQLServer::selectPointDefsTableSource(QSqlDatabase* database)
+bool SQLServer::selectPointDefsTableSource(QSqlDatabase* database, QStringList* selectedTables, QSettings* settings)
 {
     QDialog tableDialog;
     tableDialog.setWindowTitle("Select Point Definitions Source");
-    return selectModelsFromListWidget(database, &tableDialog)[0];
+    if (!selectModelsFromListWidget(database, &tableDialog, selectedTables))
+    {
+        qDebug() << "No tables selected";
+        return false;
+    }
+    return true;
 }
 
 QString SQLServer::selectDatabase()
@@ -379,22 +402,22 @@ ColumnSelection SQLServer::selectPointDataColumns(const QStringList &availableCo
 
     QFormLayout form(&columnDialog);
 
-    QComboBox nameColumnComboBox;
+    QComboBox pointIDColumnComboBox;
     QComboBox utcdatetimeColumnComboBox;
     QComboBox valueColumnComboBox;
 
-    nameColumnComboBox.addItems(availableColumns);
+    pointIDColumnComboBox.addItems(availableColumns);
     utcdatetimeColumnComboBox.addItems(availableColumns);
     valueColumnComboBox.addItems(availableColumns);
 
     // Read last selected columns from QSettings
-    QString lastName = settings->value("lastSelectedColumns/name", availableColumns).toString();
+    QString lastID = settings->value("lastSelectedColumns/datapointid", availableColumns).toString();
     QString lastUtcDatetime = settings->value("lastSelectedColumns/utcdatetime", availableColumns).toString();
     QString lastValue = settings->value("lastSelectedColumns/value", availableColumns).toString();
 
     // Set combo box current text if saved settings are available in the list
-    if (availableColumns.contains(lastName)) {
-        nameColumnComboBox.setCurrentText(lastName);
+    if (availableColumns.contains(lastID)) {
+        pointIDColumnComboBox.setCurrentText(lastID);
     }
     if (availableColumns.contains(lastUtcDatetime)) {
         utcdatetimeColumnComboBox.setCurrentText(lastUtcDatetime);
@@ -403,7 +426,7 @@ ColumnSelection SQLServer::selectPointDataColumns(const QStringList &availableCo
         valueColumnComboBox.setCurrentText(lastValue);
     }
 
-    form.addRow("Name Column:", &nameColumnComboBox);
+    form.addRow("PointID Column:", &pointIDColumnComboBox);
     form.addRow("UTCDatetime Column:", &utcdatetimeColumnComboBox);
     form.addRow("Value Column:", &valueColumnComboBox);
 
@@ -416,12 +439,12 @@ ColumnSelection SQLServer::selectPointDataColumns(const QStringList &availableCo
 
     ColumnSelection selectedColumns;
     if (columnDialog.exec() == QDialog::Accepted) {
-        selectedColumns.nameColumn = nameColumnComboBox.currentText();
+        selectedColumns.pointIDColumn = pointIDColumnComboBox.currentText();
         selectedColumns.utcdatetimeColumn = utcdatetimeColumnComboBox.currentText();
         selectedColumns.valueColumn = valueColumnComboBox.currentText();
 
         // Save last selected columns to QSettings
-        settings->setValue("lastSelectedColumns/name", selectedColumns.nameColumn);
+        settings->setValue("lastSelectedColumns/datapointid", selectedColumns.nameColumn);
         settings->setValue("lastSelectedColumns/utcdatetime", selectedColumns.utcdatetimeColumn);
         settings->setValue("lastSelectedColumns/value", selectedColumns.valueColumn);
     }
@@ -615,32 +638,6 @@ bool SQLServer::displaySignInDialog(QSqlDatabase* database, QSettings* settings)
     qDebug() << "Connected to the selected database:" << selectedDatabase;
   }
 
-  _selectedTable = selectPointDataTableSource(database);
-  if (_selectedTable.isEmpty()) {
-    qDebug() << "No table selected";
-    return false;
-  } else {
-    QSqlRecord tableRecord = _db.record(_selectedTable);
-    QStringList availableColumns;
-    for (int i = 0; i < tableRecord.count(); i++) {
-        availableColumns << tableRecord.fieldName(i);
-    }
-
-    // Let the user select the required columns
-    ColumnSelection selectedColumns = selectPointDataColumns(availableColumns, settings);
-
-    if (selectedColumns.nameColumn.isEmpty() ||
-      selectedColumns.utcdatetimeColumn.isEmpty() ||
-      selectedColumns.valueColumn.isEmpty()) {
-      qDebug() << "Required columns not selected";
-      return false;
-    } else {
-      // Perform the parsing with the selected columns
-      qDebug() << "Selected Columns: Name =" << selectedColumns.nameColumn
-                << ", UTCDatetime =" << selectedColumns.utcdatetimeColumn
-                << ", Value =" << selectedColumns.valueColumn;
-    }
-  }
   return true;
 }
 
@@ -648,6 +645,7 @@ bool signIn()
 {
     return true;
 }
+
 
 QString SQLServer::getConnectionString(QSettings* settings)
 {
@@ -662,7 +660,7 @@ QString SQLServer::getConnectionString(QSettings* settings)
     return connectionString;
 }
 
-QStringList SQLServer::selectModelsFromListWidget(QSqlDatabase* database, QDialog* tableDialog)
+bool SQLServer::selectModelsFromListWidget(QSqlDatabase* database, QDialog* tableDialog, QStringList* selectedViews)
 {
     QSqlQueryModel model;
     model.setQuery(QSqlQuery("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES UNION SELECT TABLE_NAME FROM INFORMATION_SCHEMA.VIEWS;", *database));
@@ -683,24 +681,25 @@ QStringList SQLServer::selectModelsFromListWidget(QSqlDatabase* database, QDialo
     layout.addWidget(&cancelButton);
     tableDialog->setLayout(&layout);
 
-    QStringList selectedViews;
-
     QObject::connect(&selectButton, &QPushButton::clicked, [&]() {
         QList<QListWidgetItem*> selectedItems = listWidget.selectedItems();
         if (!selectedItems.isEmpty()) {
             for (QListWidgetItem* item : selectedItems) {
-                selectedViews.append(item->text());
+                selectedViews->append(item->text());
             }
             tableDialog->accept();
+            return true;
         }
         else {
             QMessageBox::warning(tableDialog, "No source selected", "Please select a source");
+            return false;
         }
     });
     QObject::connect(&cancelButton, &QPushButton::clicked, [&]() {
         tableDialog->reject();
+        return false;
     });
 
     tableDialog->exec();
-    return selectedViews;
+    return true;
 }
