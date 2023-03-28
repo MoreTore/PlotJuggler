@@ -89,7 +89,7 @@ int SQLServer::countRowsInTable(QSqlDatabase* database, QString* selectedTableNa
 
 bool SQLServer::addPoints(QSqlDatabase* database, QSettings* settings)
 {
-    QString pointDefsSource = selectPointDefsSource(database);
+    QString pointDefsSource = selectPointDefsTableSource(database);
 
     QSqlRecord tableRecord = _db.record(pointDefsSource);
     QStringList availableColumns;
@@ -137,7 +137,7 @@ bool SQLServer::start(QStringList*)
     return _running;
   }
 
-  if (!displaySignInDialog(&_settings)) return false;
+  if (!displaySignInDialog(&_db, &_settings)) return false;
 
 
   _model = new QSqlQuery(_db);
@@ -309,18 +309,18 @@ QString SQLServer::selectModelFromList(QSqlDatabase* database, QDialog* tableDia
     return selectedView;
 }
 
-QString SQLServer::selectPointDataTable(QSqlDatabase* database)
+QString SQLServer::selectPointDataTableSource(QSqlDatabase* database)
 {
     QDialog tableDialog;
     tableDialog.setWindowTitle("Select Point Data Source");
-    return selectModelFromList(database, &tableDialog);
+    return selectModelsFromListWidget(database, &tableDialog)[0];
 }
 
-QString SQLServer::selectPointDefsSource(QSqlDatabase* database)
+QString SQLServer::selectPointDefsTableSource(QSqlDatabase* database)
 {
     QDialog tableDialog;
     tableDialog.setWindowTitle("Select Point Definitions Source");
-    return selectModelFromList(database, &tableDialog);
+    return selectModelsFromListWidget(database, &tableDialog)[0];
 }
 
 QString SQLServer::selectDatabase()
@@ -477,7 +477,7 @@ ColumnSelection SQLServer::selectPointDefsColumns(const QStringList &availableCo
     return selectedColumns;
 }
 
-bool SQLServer::displaySignInDialog(QSettings* settings)
+bool SQLServer::displaySignInDialog(QSqlDatabase* database, QSettings* settings)
 {
     if (QSqlDatabase::drivers().isEmpty()) {
         QMessageBox::critical(nullptr, "Unable to load database", "This demo needs at least one Qt SQL driver");
@@ -582,24 +582,12 @@ bool SQLServer::displaySignInDialog(QSettings* settings)
   settings->setValue("password", password);
   settings->setValue("driverName", driverName);
   settings->setValue("driverType", driverType);
+  settings->setValue("trustedConnection", useTrustedConnection);
 
+  database->setDatabaseName(getConnectionString(settings));
 
-  QString connectionString;
-  if (useTrustedConnection) {
-    connectionString = QString("Driver={%1};Server=%2;Database=%3;Trusted_Connection=Yes;TrustServerCertificate=yes;")
-                          .arg(driverName)
-                            .arg(hostName)
-                          .arg(dbName);
-  } else {
-    connectionString = QString("Driver={SQL Server};Server=%1;Database=%2;")
-                          .arg(hostName)
-                          .arg(dbName);
-  }
-
-  _db.setDatabaseName(connectionString);
-
-  _db.setConnectOptions("SQL_ATTR_ACCESS_MODE=SQL_MODE_READ_ONLY;");
-  if (!_db.open()) {
+  database->setConnectOptions("SQL_ATTR_ACCESS_MODE=SQL_MODE_READ_ONLY;");
+  if (!database->open()) {
     qDebug() << "Database error:" << _db.lastError().text();
     // Warning message box
     QMessageBox msgBox;
@@ -610,7 +598,7 @@ bool SQLServer::displaySignInDialog(QSettings* settings)
     qDebug() << "Database connection established";
     qDebug() << "Database name:" << _db.databaseName();
   }
-  qDebug() << _db.lastError().text();
+  qDebug() << database->lastError().text();
 
   QString selectedDatabase = selectDatabase();
   if (selectedDatabase.isEmpty()) {
@@ -618,20 +606,16 @@ bool SQLServer::displaySignInDialog(QSettings* settings)
     return false;
   } else {
     // Set the database name and reconnect
-    connectionString = QString("Driver={%1};Server=%2;Database=%3;Trusted_Connection=Yes;TrustServerCertificate=yes;")
-                            .arg(driverName)
-                            .arg(hostName)
-                            .arg(dbName);
-    _db.setDatabaseName(connectionString);
-    _db.setConnectOptions("SQL_ATTR_ACCESS_MODE=SQL_MODE_READ_ONLY;");
-    if (!_db.open()) {
+    database->setDatabaseName(getConnectionString(settings));
+    database->setConnectOptions("SQL_ATTR_ACCESS_MODE=SQL_MODE_READ_ONLY;");
+    if (!database->open()) {
       qDebug() << "Failed to connect to the selected database:" << _db.lastError().text();
       return false;
     }
     qDebug() << "Connected to the selected database:" << selectedDatabase;
   }
 
-  _selectedTable = selectPointDataTable(&_db);
+  _selectedTable = selectPointDataTableSource(database);
   if (_selectedTable.isEmpty()) {
     qDebug() << "No table selected";
     return false;
@@ -658,4 +642,65 @@ bool SQLServer::displaySignInDialog(QSettings* settings)
     }
   }
   return true;
+}
+
+bool signIn()
+{
+    return true;
+}
+
+QString SQLServer::getConnectionString(QSettings* settings)
+{
+    QString connectionString = QString("Driver={%1};Server=%2;Database=%3;Trusted_Connection=%4;TrustServerCertificate=%5;")
+                            .arg(settings->value("driverName", "").toString())
+                            .arg(settings->value("hostName", "").toString())
+                            .arg(settings->value("dbName", "").toString())
+                            // Trusted_Connection & TrustServerCertificate is a boolean value, so we need to convert it to yes/no
+                            .arg(settings->value("trustedConnection", true).toBool() ? "yes" : "no")
+                            .arg(settings->value("trustedConnection", true).toBool() ? "yes" : "no");
+    qDebug() << connectionString;
+    return connectionString;
+}
+
+QStringList SQLServer::selectModelsFromListWidget(QSqlDatabase* database, QDialog* tableDialog)
+{
+    QSqlQueryModel model;
+    model.setQuery(QSqlQuery("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES UNION SELECT TABLE_NAME FROM INFORMATION_SCHEMA.VIEWS;", *database));
+
+    QVBoxLayout layout;
+    QListWidget listWidget;
+    listWidget.setSelectionMode(QAbstractItemView::MultiSelection);
+
+    for (int i = 0; i < model.rowCount(); ++i) {
+        listWidget.addItem(model.record(i).value(0).toString());
+    }
+
+    QPushButton selectButton("Select");
+    QPushButton cancelButton("Cancel");
+
+    layout.addWidget(&listWidget);
+    layout.addWidget(&selectButton);
+    layout.addWidget(&cancelButton);
+    tableDialog->setLayout(&layout);
+
+    QStringList selectedViews;
+
+    QObject::connect(&selectButton, &QPushButton::clicked, [&]() {
+        QList<QListWidgetItem*> selectedItems = listWidget.selectedItems();
+        if (!selectedItems.isEmpty()) {
+            for (QListWidgetItem* item : selectedItems) {
+                selectedViews.append(item->text());
+            }
+            tableDialog->accept();
+        }
+        else {
+            QMessageBox::warning(tableDialog, "No source selected", "Please select a source");
+        }
+    });
+    QObject::connect(&cancelButton, &QPushButton::clicked, [&]() {
+        tableDialog->reject();
+    });
+
+    tableDialog->exec();
+    return selectedViews;
 }

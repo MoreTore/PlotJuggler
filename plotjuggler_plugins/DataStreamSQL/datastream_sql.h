@@ -83,7 +83,7 @@ private:
   int _previousRowCount;
   int _row = 0;
   std::map<int, std::string> _pointIdToNameMap;
-  bool displaySignInDialog(QSettings* settings);
+  bool displaySignInDialog(QSqlDatabase* database, QSettings* settings);
   QSettings _settings;
   //std::map<std::string, Parameters> _parameters;
 
@@ -95,8 +95,10 @@ private slots:
   int countRowsInTable(QSqlDatabase* database, QString* selectedTableName);
   bool addPoints(QSqlDatabase* database, QSettings* settings);
   QString selectModelFromList(QSqlDatabase* database, QDialog* tableDialog);
-  QString selectPointDataTable(QSqlDatabase* database);
-  QString selectPointDefsSource(QSqlDatabase* database);
+  QStringList selectModelsFromListWidget(QSqlDatabase* database, QDialog* tableDialog);
+  QString selectPointDataTableSource(QSqlDatabase* database);
+  QString selectPointDefsTableSource(QSqlDatabase* database);
+  QString getConnectionString(QSettings* settings);
 
   
 };
