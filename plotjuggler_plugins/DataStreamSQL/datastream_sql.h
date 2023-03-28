@@ -23,12 +23,14 @@ THE SOFTWARE.
 #include "PlotJuggler/messageparser_base.h"
 #include <QSqlTableModel>
 #include <QTimer>
+#include <QSettings>
 
 
 using namespace PJ;
 
 struct ColumnSelection {
     QString nameColumn;
+    QString pointIDColumn;
     QString utcdatetimeColumn;
     QString valueColumn;
 };
@@ -68,19 +70,21 @@ public:
     void tableUpdated();
 
 private:
-  int _limit;
-  int _offset;
+  QString _selectedTable;
   QSqlDatabase _db;
   std::thread _thread;
-  QString selectTable();
   QString selectDatabase();
-  ColumnSelection selectColumns(const QStringList &availableColumns);
+  ColumnSelection selectPointDataColumns(const QStringList &availableColumns, QSettings* settings);
+  ColumnSelection selectPointDefsColumns(const QStringList &availableColumns, QSettings* settings);
   bool _running;
-  QSqlTableModel* _model;
+  QSqlQuery* _model;
   PJ::MessageParserPtr _parser;
   QTimer _checkNewRowsTimer; // Add this new QTimer
   int _previousRowCount;
   int _row = 0;
+  std::map<int, std::string> _pointIdToNameMap;
+  bool displaySignInDialog(QSettings* settings);
+  QSettings _settings;
   //std::map<std::string, Parameters> _parameters;
 
 private slots:
@@ -88,5 +92,11 @@ private slots:
   void processData();
   void loop();
   void checkForNewRows();
+  int countRowsInTable(QSqlDatabase* database, QString* selectedTableName);
+  bool addPoints(QSqlDatabase* database, QSettings* settings);
+  QString selectModelFromList(QSqlDatabase* database, QDialog* tableDialog);
+  QString selectPointDataTable(QSqlDatabase* database);
+  QString selectPointDefsSource(QSqlDatabase* database);
+
   
 };

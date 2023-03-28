@@ -76,7 +76,7 @@ linux-g++ | linux-g++-64 {
 
     # QMAKE_CXXFLAGS_DEBUG  *= -Og # since gcc 4.8
 
-    # QMAKE_CXXFLAGS_RELEASE  *= -O3
+     QMAKE_CXXFLAGS_RELEASE  *= -O3
     # QMAKE_CXXFLAGS_RELEASE  *= -Ofast
     # QMAKE_CXXFLAGS_RELEASE  *= -Os
 
@@ -87,7 +87,7 @@ linux-g++ | linux-g++-64 {
 
 linux-clang {
 
-    #QMAKE_CXXFLAGS_RELEASE  *= -O3
+    QMAKE_CXXFLAGS_RELEASE  *= -O3
 }
 
 ######################################################################
