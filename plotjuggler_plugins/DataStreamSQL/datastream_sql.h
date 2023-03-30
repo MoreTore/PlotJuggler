@@ -74,8 +74,14 @@ public:
 private:
 
   QString _selectedTable;
+  bool _updateRowCount;
+  ColumnSelection _columnSelection;
+  QStringList _selectedTables;
   QSqlDatabase _db;
   std::thread _thread;
+  QVector<QSqlQuery*> _models;
+  QVector<QThread*> _threads;
+  bool setupQuery();
   QString selectDatabase();
   ColumnSelection selectPointDataColumns(const QStringList &availableColumns, QSettings* settings);
   ColumnSelection selectPointDefsColumns(const QStringList &availableColumns, QSettings* settings);

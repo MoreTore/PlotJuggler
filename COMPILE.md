@@ -138,9 +138,9 @@ cmake --build build/PlotJuggler --config Release --parallel --target install
 Change the path where **vcpkg.cmake** can be found as needed.
 
 ```
-set CMAKE_TOOLCHAIN=/path/vcpkg/scripts/buildsystems/vcpkg.cmake
+set CMAKE_TOOLCHAIN=vcpkg/scripts/buildsystems/vcpkg.cmake
 
-cmake -G "Visual Studio 16" ^
+cmake -G "Visual Studio 17" ^
       -S src/PlotJuggler -B build/PlotJuggler ^
       -DCMAKE_TOOLCHAIN_FILE=%CMAKE_TOOLCHAIN%  ^
       -DCMAKE_INSTALL_PREFIX=%cd%/install
@@ -159,7 +159,7 @@ xcopy install\bin\*.* installer\io.plotjuggler.application\data /Y /S /f /z
 C:\Qt\5.15.2\msvc2019_64\bin\windeployqt.exe --release ^
    installer\io.plotjuggler.application\data\plotjuggler.exe 
 
-C:\Qt\Tools\QtInstallerFramework\4.1\bin\binarycreator.exe ^
+"C:\Qt\QtIFW-4.5.2\bin\binarycreator.exe" ^
    --offline-only -c installer\config.xml -p installer ^
    PlotJuggler-Windows-installer.exe
 
