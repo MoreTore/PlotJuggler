@@ -33,6 +33,8 @@ struct ColumnSelection {
     QString pointIDColumn;
     QString utcdatetimeColumn;
     QString valueColumn;
+    unsigned long long _row;
+    unsigned long long _previousRowCount;
 };
 
 
@@ -66,36 +68,30 @@ public:
   {
     return false;
   }
-  
 
   signals:
     void tableUpdated();
 
 private:
-
+  bool _running;
+  QSettings _settings;
   QString _selectedTable;
-  bool _updateRowCount;
-  ColumnSelection _columnSelection;
   QStringList _selectedTables;
   QSqlDatabase _db;
+  QSqlQuery* _model;
+  QTimer _checkNewRowsTimer;
+  bool _updateRowCount;
+  unsigned long long _previousRowCount;
+  unsigned long long _row = 0;
   std::thread _thread;
-  QVector<QSqlQuery*> _models;
-  QVector<QThread*> _threads;
-  bool setupQuery();
+  bool setupQuery(ColumnSelection* selectedColumns);
   QString selectDatabase();
+  ColumnSelection _columnSelection;
   ColumnSelection selectPointDataColumns(const QStringList &availableColumns, QSettings* settings);
   ColumnSelection selectPointDefsColumns(const QStringList &availableColumns, QSettings* settings);
-  bool _running;
-  QSqlQuery* _model;
-  PJ::MessageParserPtr _parser;
-  QTimer _checkNewRowsTimer; // Add this new QTimer
-  int _previousRowCount;
-  int _row = 0;
-  std::map<int, std::string> _pointIdToNameMap;
   bool displaySignInDialog(QSqlDatabase* database, QSettings* settings);
-  QSettings _settings;
-  //std::map<std::string, Parameters> _parameters;
-
+  std::map<int, std::string> _pointIdToNameMap;
+  
 private slots:
 
   void processData();
@@ -107,6 +103,5 @@ private slots:
   bool selectModelsFromListWidget(QSqlDatabase* database, QDialog* tableDialog, QStringList* selectedViews);
   bool selectPointDefsTableSource(QSqlDatabase* database, QStringList* selectedTables, QSettings* settings);
   QString getConnectionString(QSettings* settings);
-  //ColumnSelection selectDataColumns(QSqlDatabase* database, QStringList* selectedTables, QSettings* settings);
   
 };
